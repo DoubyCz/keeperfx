@@ -9,6 +9,11 @@
 
 [Visit our website](https://keeperfx.net) | [Join our Discord (Keeper Klan)](https://discord.gg/hE4p7vy2Hb)
 
+> **DoubyCz fork note:** This fork exists primarily to provide a reliable
+> **native Linux build** of KeeperFX — a portable **AppImage** that runs on most
+> distributions and an **Arch AUR** package — together with the fixes needed to
+> build cleanly on modern Linux toolchains. See the [Linux](#linux) section.
+
 
 ## Intro
 KeeperFX (Dungeon Keeper Fan eXpansion) is an open-source project that aims to fix up, enhance and modernize 
@@ -24,6 +29,7 @@ Currently the whole codebase of Dungeon Keeper is remade and all code has been r
 
 ## Features
 - Windows 7/10/11 support
+- Linux support (portable AppImage, x86_64)
 - Higher screen resolutions
 - Increased FPS, decoupled gfx and game logic
 - Improved and modernized controls
@@ -43,6 +49,53 @@ You will need the original Dungeon Keeper files, either from an old CD or from t
 [EA](https://www.ea.com/games/dungeon-keeper/dungeon-keeper),
 [GOG](https://www.gog.com/game/dungeon_keeper)
 or [Steam](https://store.steampowered.com/app/1996630/Dungeon_Keeper_Gold/).
+
+
+## Linux
+
+KeeperFX runs natively on Linux. The easiest way is the **portable AppImage**,
+which runs on most modern x86_64 distributions (Ubuntu, Fedora, Linux Mint,
+Debian, Arch, …) **without installing any dependencies** — the engine, a modern
+SDL2, ffmpeg and all other libraries are bundled inside.
+
+### Quick start
+1. Download `KeeperFX-<version>-linux-x86_64.AppImage` from the
+   [Releases](https://github.com/DoubyCz/keeperfx/releases) page.
+2. Make it executable: `chmod +x KeeperFX-*-x86_64.AppImage`
+3. Run it: `./KeeperFX-*-x86_64.AppImage`
+
+On the first run it creates a game folder at `~/.local/share/keeperfx`, fills it
+with the free KeeperFX data, and tells you that the original Dungeon Keeper files
+are still needed.
+
+### Adding the original game data
+KeeperFX needs the original Dungeon Keeper files (you must own the game — GOG /
+Steam / CD); they are **not bundled** for copyright reasons. Copy the contents of
+your original `data`, `sound`, `ldata` and `levels` folders into
+`~/.local/share/keeperfx/` (GOG: the install folder; CD: the `keeper` folder),
+then start the AppImage again. To use a different game folder, run
+`KEEPERFX_HOME=/path/to/dir ./KeeperFX-*.AppImage`.
+
+### Requirements & notes
+- **x86_64** only.
+- A reasonably **recent distribution**: the AppImage is built on Debian 12
+  (glibc 2.36), so it runs on Ubuntu 22.10+/24.04, Fedora 37+, Mint 22+,
+  Debian 12+, Arch and similar. Very old releases (e.g. Ubuntu 22.04 / Mint 21,
+  glibc 2.35) may be too old.
+- **FUSE** is needed to mount the AppImage. If your distribution lacks it,
+  install `libfuse2`, or run the AppImage with `--appimage-extract-and-run`.
+- The **first start** is a little slower (the image is mounted and the bundled
+  data is copied into your game folder once).
+- Works on both **X11 and Wayland**, including **multi-monitor** setups.
+
+### Arch Linux
+Arch users can also use the `keeperfx-git` AUR package, which builds from source
+and integrates natively, instead of the AppImage. *(planned)*
+
+### Building the AppImage yourself
+The AppImage is built reproducibly in a Debian 12 container; see
+[`dist/linux/build-appimage.sh`](dist/linux/build-appimage.sh) and the
+[`Build Linux AppImage`](.github/workflows/linux-appimage.yml) workflow.
 
 
 ## Development
