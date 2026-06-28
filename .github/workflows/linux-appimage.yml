@@ -47,5 +47,14 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/appimage-')
         uses: softprops/action-gh-release@v2
         with:
+          name: "KeeperFX Linux AppImage — ${{ github.ref_name }}"
           files: dist/out/*.AppImage
           generate_release_notes: true
+          body: |
+            Portable KeeperFX AppImage for **x86_64 Linux** (Ubuntu, Fedora, Linux Mint,
+            Debian, Arch, …). All libraries are bundled, so no dependencies need to be installed.
+
+            **You must own the original Dungeon Keeper** (GOG / Steam / CD); its files are not
+            bundled for copyright reasons. See the
+            [Linux section of the README](https://github.com/DoubyCz/keeperfx#linux) for how to
+            download, run, and supply the original game data.
