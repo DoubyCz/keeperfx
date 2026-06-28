@@ -58,9 +58,12 @@ which runs on most modern x86_64 distributions (Ubuntu, Fedora, Linux Mint,
 Debian, Arch, …) **without installing any dependencies** — the engine, a modern
 SDL2, ffmpeg and all other libraries are bundled inside.
 
+**⬇️ Download the latest Linux AppImage from the
+[Releases page](https://github.com/DoubyCz/keeperfx/releases/).**
+
 ### Quick start
 1. Download `KeeperFX-<version>-linux-x86_64.AppImage` from the
-   [Releases](https://github.com/DoubyCz/keeperfx/releases) page.
+   [Releases](https://github.com/DoubyCz/keeperfx/releases/) page.
 2. Make it executable: `chmod +x KeeperFX-*-x86_64.AppImage`
 3. Run it: `./KeeperFX-*-x86_64.AppImage`
 
