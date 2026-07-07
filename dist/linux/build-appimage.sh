@@ -19,7 +19,7 @@ export APPIMAGE_EXTRACT_AND_RUN=1   # run the tool AppImages without FUSE (works
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT_DIR="${1:-$REPO/dist/out}"
 # Official KeeperFX release whose free data we bundle (the binary itself is built from this tree).
-KFX_DATA_VERSION="${KFX_DATA_VERSION:-1.3.2}"
+KFX_DATA_VERSION="${KFX_DATA_VERSION:-1.4.0}"
 mkdir -p "$OUT_DIR"
 cd "$REPO"
 
