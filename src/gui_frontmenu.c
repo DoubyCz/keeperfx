@@ -24,6 +24,7 @@
 #include "bflib_guibtns.h"
 #include "kjm_input.h"
 #include "frontend.h"
+#include "frontmenu_ingame_evnt.h"
 #include "gui_frontbtns.h"
 #include "front_input.h"
 #include "config_settings.h"
@@ -49,13 +50,17 @@ struct GuiMenu *get_active_menu(MenuNumber num)
 
 int first_monopoly_menu(void)
 {
-    for (int idx = 0; idx < ACTIVE_MENUS_COUNT; idx++)
-    {
+    int error_menu = menu_id_to_number(GMnu_FEERROR_BOX);
+    if (error_menu >= 0) {
+        return error_menu;
+    }
+    for (int idx = 0; idx < ACTIVE_MENUS_COUNT; idx++) {
         struct GuiMenu* gmnu = &active_menus[idx];
-        if ((gmnu->visual_state != 0) && (gmnu->is_monopoly_menu != 0))
+        if ((gmnu->visual_state != 0) && (gmnu->is_monopoly_menu != 0)) {
             return idx;
-  }
-  return -1;
+        }
+    }
+    return -1;
 }
 
 MenuNumber menu_id_to_number(MenuID menu_id)
@@ -383,7 +388,7 @@ void update_query_menu()
 {
     if(!(menu_is_active(GMnu_CREATURE_QUERY1) || menu_is_active(GMnu_CREATURE_QUERY2) || menu_is_active(GMnu_CREATURE_QUERY3) || menu_is_active(GMnu_CREATURE_QUERY4)))
         return;
-    struct Thing* thing = thing_get(get_my_player()->influenced_thing_idx);
+    struct Thing* thing = thing_get(get_user_state(get_displayed_user())->influenced_thing_idx);
 
     if (menu_is_active(GMnu_CREATURE_QUERY1))
     {
@@ -569,17 +574,31 @@ long first_available_menu(void)
 
 void turn_off_event_box_if_necessary(PlayerNumber plyr_idx, unsigned char event_idx)
 {
-    struct Dungeon* dungeon = get_players_num_dungeon(plyr_idx);
-    if (dungeon->visible_event_idx != event_idx) {
+    if (!is_my_player_number(plyr_idx) || (my_visible_event_idx != event_idx)) {
         return;
     }
-    dungeon->visible_event_idx = 0;
-    if (is_my_player_number(plyr_idx))
-    {
-        turn_off_menu(GMnu_TEXT_INFO);
-        turn_off_menu(GMnu_BATTLE);
-        turn_off_menu(GMnu_DUNGEON_SPECIAL);
+    my_visible_event_idx = 0;
+    turn_off_menu(GMnu_TEXT_INFO);
+    turn_off_menu(GMnu_BATTLE);
+    turn_off_menu(GMnu_DUNGEON_SPECIAL);
+}
+
+void turn_off_event_box_if_stale(void)
+{
+    if (my_visible_event_idx == 0) {
+        return;
     }
+    if (game.event[my_visible_event_idx].kind != 0)
+    {
+        const struct Dungeon *dungeon = get_my_dungeon();
+        for (int i = 0; i <= EVENT_BUTTONS_COUNT; i++)
+        {
+            if (dungeon->event_button_index[i] == my_visible_event_idx) {
+                return;
+            }
+        }
+    }
+    turn_off_event_box_if_necessary(my_player_number, my_visible_event_idx);
 }
 
 /******************************************************************************/

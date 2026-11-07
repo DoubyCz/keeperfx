@@ -2,7 +2,7 @@
 -- Entry points for engine-triggered events (e.g. OnPowerCast, OnGameTick).
 -- These functions are called by the C engine and dispatch event data to the Lua trigger system.
 
----@alias event_type "PowerCast"|"Death"|"SpecialActivated"|"GameTick"|"ChatMsg"|"DungeonDestroyed"|"TrapPlaced"|"ApplyDamage"|"LevelUp"|"Rebirth"|"SlabKindChange"|"SlabOwnerChange"|"RoomOwnerChange"|"ShotHitThing"|"Destroyed"
+---@alias event_type "PowerCast"|"Death"|"SpecialActivated"|"GameTick"|"ChatMsg"|"DungeonDestroyed"|"TrapPlaced"|"ApplyDamage"|"LevelUp"|"PickUp"|"Slap"|"Rebirth"|"CreatureFellIntoAbyss"|"SlabKindChange"|"SlabOwnerChange"|"RoomOwnerChange"|"ShotHitThing"|"Destroyed"
 
 --- Called when a spell is cast on a unit
 --- @param pwkind power_kind
@@ -90,7 +90,6 @@ function OnApplyDamage(thing, damage, dealing_player)
     ProcessEvent("ApplyDamage",eventData)
 end
 
-
 --- Called when a creature levels up
 ---@param creature Creature
 function OnLevelUp(creature)
@@ -99,12 +98,38 @@ function OnLevelUp(creature)
     ProcessEvent("LevelUp",eventData)
 end
 
+--- Called when a thing is picked up. Can be Creatures, Chickens, Specials, Gold, etc.
+---@param thing Thing
+---@param player Player
+function OnPickUp(thing, player)
+    local eventData = {}
+    eventData.thing = thing
+    eventData.player = player
+    ProcessEvent("PickUp",eventData)
+end
+
+--- Called when a thing is slapped. Can be Creatures, Traps, Shots, Objects, etc.
+---@param thing Thing
+---@param player Player
+function OnSlap(thing, player)
+    local eventData = {}
+    eventData.thing = thing
+    eventData.player = player
+    ProcessEvent("Slap",eventData)
+end
+
 --- Called when a unit resurrects from his rebirth ability (like a vampire)
 --- @param unit Creature The unit that rises from the death with 1xp level less
 function OnCreatureRebirth(unit)
     local eventData = {}
     eventData.unit = unit
     ProcessEvent("Rebirth",eventData)
+end
+
+function OnCreatureFellIntoAbyss(unit)
+    local eventData = {}
+    eventData.unit = unit
+    ProcessEvent("CreatureFellIntoAbyss",eventData)
 end
 
 --- Called when a slab changed
@@ -138,7 +163,7 @@ function OnRoomOwnerChange(room, old_owner)
 end
 
 --- Called when a shot hits a thing
----@param shot Thing the shot hitting something.
+---@param shot Shot the shot hitting something.
 ---@param shooter Thing|nil the shooter of the shot.
 ---@param target Thing|nil what was hit, will be nil if the shot hit a wall. 
 ---@param next_stl_x integer where the shot would have been had it not hit something. Useful if the shot hit a wall.

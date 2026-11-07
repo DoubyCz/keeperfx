@@ -21,6 +21,7 @@
 
 #include "bflib_basics.h"
 #include "globals.h"
+#include "net_main.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -44,11 +45,12 @@ TbBool object_is_pickable_by_hand_for_use(const struct Thing *thing, long plyr_i
 TbBool object_is_pickable_by_hand_to_hold_by_player(const struct Thing* thing, long plyr_idx);
 TbBool object_is_pickable_by_hand_to_hold(const struct Thing* thing);
 TbBool thing_is_pickable_by_hand(struct PlayerInfo *player, const struct Thing *thing);
-struct Thing *process_object_being_picked_up(struct Thing *thing, long a2);
-void set_power_hand_graphic(unsigned char plyr_idx, long HandAnimationID);
+struct Thing *process_object_being_picked_up(struct Thing *thing, PlayerNumber plyr_idx);
+void set_power_hand_graphic(NetUserId user, long HandAnimationID);
 TbBool power_hand_is_empty(const struct PlayerInfo *player);
+TbBool power_hand_is_hovering(NetUserId user);
 TbBool power_hand_is_full(const struct PlayerInfo *player);
-struct Thing *get_first_thing_in_power_hand(struct PlayerInfo *player);
+struct Thing *get_first_thing_in_power_hand(const struct PlayerInfo *player);
 void draw_power_hand(void);
 void clear_things_in_hand(struct PlayerInfo *player);
 TbResult use_power_hand(PlayerNumber plyr_idx, MapSubtlCoord stl_x, MapSubtlCoord stl_y, unsigned short tng_idx);
@@ -68,11 +70,12 @@ TbBool thing_is_picked_up_by_player(const struct Thing *thing, PlayerNumber plyr
 long get_thing_in_hand_id(const struct Thing* thing, PlayerNumber plyr_idx);
 
 TbBool slap_object(struct Thing *thing);
-TbBool object_is_slappable(const struct Thing *thing, long plyr_idx);
-TbBool thing_slappable(const struct Thing *thing, long plyr_idx);
+TbBool object_is_slappable_by_player(const struct Thing *thing, PlayerNumber plyr_idx);
+TbBool object_is_slappable(const struct Thing* thing);
+TbBool thing_slappable(const struct Thing *thing, PlayerNumber plyr_idx);
 
-struct Thing *create_power_hand(PlayerNumber owner);
-void delete_power_hand(PlayerNumber owner);
+struct Thing *create_power_hand(NetUserId user);
+void delete_power_hand(NetUserId user);
 void stop_creatures_around_hand(PlayerNumber plyr_idx, MapSubtlCoord stl_x,  MapSubtlCoord stl_y);
 
 TbBool place_thing_in_power_hand(struct Thing *thing, PlayerNumber plyr_idx);
@@ -86,6 +89,8 @@ TbBool armageddon_blocks_creature_pickup(const struct Thing *thing, PlayerNumber
 TbBool thing_pickup_is_blocked_by_hand_rule(const struct Thing *thing_to_pick, PlayerNumber plyr_idx);
 void reset_hand_rules(void);
 void script_set_hand_rule(PlayerNumber plyr_idx, long crtr_id,long hand_rule_action,long hand_rule_slot,long hand_rule_type,long param);
+
+void process_things_in_dungeon_hand(void);
 
 enum HandRuleType {
     // hand_rule_test_fns are indexed by these enum values -> reordering or adding new types affects test_fns
@@ -113,10 +118,10 @@ enum HandRuleAction {
 };
 
 struct HandRule {
-    char type;
-    char enabled;
-    char allow; // allow: 1, deny: 0
-    long param;
+    int8_t type;
+    int8_t enabled;
+    int8_t allow; // allow: 1, deny: 0
+    int32_t param;
 };
 
 TbBool eval_hand_rule_for_thing(struct HandRule *rule, const struct Thing *thing_to_pick);

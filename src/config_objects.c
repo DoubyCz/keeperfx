@@ -59,6 +59,7 @@ const struct NamedCommand objects_properties_commands[] = {
   {"HEART",                   OMF_Heart               },
   {"HOLD_IN_HAND",            OMF_HoldInHand          },
   {"IGNORED_BY_IMPS",         OMF_IgnoredByImps       },
+  {"SLAPPABLE",               OMF_Slappable           },
   {NULL,                      0},
   };
 
@@ -96,6 +97,8 @@ static const struct NamedField objects_named_fields[] = {
     {"DESTROYONLAVA",            0, field_t(struct ObjectConfigStats, destroy_on_lava),               0, INT32_MIN,UINT32_MAX, NULL,                        value_default,   assign_default},
     {"HEALTH",                   0, field_t(struct ObjectConfigStats, health),                        0, INT32_MIN,UINT32_MAX, NULL,                        value_default,   assign_default},
     {"FALLACCELERATION",         0, field_t(struct ObjectConfigStats, fall_acceleration),             0, INT32_MIN,UINT32_MAX, NULL,                        value_default,   assign_default},
+    {"INERTIA",                  0, field_t(struct ObjectConfigStats, inertia_floor),               204, INT32_MIN,UINT32_MAX, NULL,                        value_default,   assign_default},
+    {"INERTIA",                  1, field_t(struct ObjectConfigStats, inertia_air),                  51, INT32_MIN,UINT32_MAX, NULL,                        value_default,   assign_default},
     {"LIGHTUNAFFECTED",          0, field_t(struct ObjectConfigStats, light_unaffected),              0, INT32_MIN,UINT32_MAX, NULL,                        value_default,   assign_default},
     {"LIGHTINTENSITY",           0, field_t(struct ObjectConfigStats, ilght.intensity),               0, INT32_MIN,UINT32_MAX, NULL,                        value_default,   assign_default},
     {"LIGHTRADIUS",              0, field_t(struct ObjectConfigStats, ilght.radius),                  0, INT32_MIN,UINT32_MAX, NULL,                        value_stltocoord,assign_default},
@@ -104,7 +107,7 @@ static const struct NamedField objects_named_fields[] = {
     {"HANDICON",                 0, field_t(struct ObjectConfigStats, hand_icon),                     0, INT32_MIN,UINT32_MAX, NULL,                        value_icon,      assign_icon},
     {"PICKUPOFFSET",             0, field_t(struct ObjectConfigStats, object_picked_up_offset.delta_x), 0,SHRT_MIN,SHRT_MAX, NULL,                        value_default,   assign_default},
     {"PICKUPOFFSET",             1, field_t(struct ObjectConfigStats, object_picked_up_offset.delta_y), 0,SHRT_MIN,SHRT_MAX, NULL,                        value_default,   assign_default},
-    {"TOOLTIPTEXTID",            0, field_t(struct ObjectConfigStats, tooltip_stridx),     GUIStr_Empty, SHRT_MIN, SHRT_MAX, NULL,                        value_default,   assign_default},
+    {"TOOLTIPTEXTID",            0, field_t(struct ObjectConfigStats, tooltip_stridx),     GUIStr_Empty, SHRT_MIN, SHRT_MAX, NULL,                        value_stringId,   assign_default},
     {"TOOLTIPTEXTID",            1, field_t(struct ObjectConfigStats, tooltip_optional),              0,        0,        1, NULL,                        value_default,   assign_default},
     {"AMBIENCESOUND",            0, field_t(struct ObjectConfigStats, fp_smpl_idx),                   0,        0,UINT32_MAX, NULL,                        value_sound_id,   assign_default},
     {"UPDATEFUNCTION",           0, field_t(struct ObjectConfigStats, updatefn_idx),                  0, INT32_MIN,UINT32_MAX, object_update_functions_desc,value_function,  assign_default},
@@ -245,7 +248,14 @@ void update_all_objects_of_model(ThingModel model)
                 }
             }
         }
-
+        thing->clipbox_size_xy = objst->size_xy;
+        thing->clipbox_size_z = objst->size_z;
+        thing->solid_size_xy = objst->size_xy;
+        thing->solid_size_z = objst->size_z;
+        thing->fall_acceleration = objst->fall_acceleration;
+        thing->inertia_floor = objst->inertia_floor;
+        thing->inertia_air = objst->inertia_air;
+        set_flag_value(thing->movement_flags, TMvF_Immobile, objst->immobile);
 
         if (thing->light_id != 0)
         {

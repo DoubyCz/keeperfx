@@ -74,7 +74,6 @@ static const struct NamedField compp_common_named_fields[] = {
   {"ComputerAssists",        3, field_a(struct ComputerPlayerConfig, computer_assist_types, 3), 0, 0,COMPUTER_MODELS_COUNT, NULL, value_default, assign_default},
   {"SkirmishFirst",          0, field_t(struct ComputerPlayerConfig, skirmish_first),           0, 0,COMPUTER_MODELS_COUNT, NULL, value_default, assign_default},
   {"SkirmishLast",           0, field_t(struct ComputerPlayerConfig, skirmish_last),            0, 0,COMPUTER_MODELS_COUNT, NULL, value_default, assign_default},
-  {"DefaultComputerAssist",  0, field_t(struct ComputerPlayerConfig, player_assist_default),    0, 0,COMPUTER_MODELS_COUNT, NULL, value_default, assign_default},
   {NULL},
 };
 
@@ -189,7 +188,7 @@ const struct NamedFieldSet compp_event_named_fields_set = {
 static const struct NamedField compp_computer_named_fields[] = {
   //name           //pos    //field                                                    //default //min     //max    //NamedCommand
   {"NAME",             -1, field_t(struct ComputerType, name),                     0, INT32_MIN,UINT32_MAX, NULL,         value_name,    assign_null},
-  {"TOOLTIPTEXTID",     0, field_t(struct ComputerType, tooltip_stridx),GUIStr_Empty, INT32_MIN,UINT32_MAX, NULL,         value_default, assign_default},
+  {"TOOLTIPTEXTID",     0, field_t(struct ComputerType, tooltip_stridx),GUIStr_Empty, INT32_MIN,UINT32_MAX, NULL,         value_stringId, assign_default},
   {"ASSISTANTICON",     0, field_t(struct ComputerType, sprite_idx),               0, INT32_MIN,UINT32_MAX, NULL,         value_icon,    assign_icon},
   {"VALUES",            0, field_t(struct ComputerType, dig_stack_size),          0, INT32_MIN,UINT32_MAX, NULL,         value_default, assign_default},
   {"VALUES",            1, field_t(struct ComputerType, processes_time),          0, INT32_MIN,UINT32_MAX, NULL,         value_default, assign_default},

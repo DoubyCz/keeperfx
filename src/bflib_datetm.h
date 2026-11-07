@@ -22,8 +22,6 @@
 
 #include <time.h>
 #include "bflib_basics.h"
-#include "keeperfx.hpp"
-#include "game_legacy.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -41,6 +39,10 @@ TbBool LbSleepUntilExt(long double tick_ns_end);
 TbBool LbSleepDelayExt(long double tick_ns_delay);
 TbResult LbTime(struct TbTime *curr_time);
 TbTimeSec LbTimeSec(void);
+    
+TbBool get_local_timezone(int32_t *utc_offset, int *isdst);
+TbBool decode_posix_time(int64_t posix_time, int32_t utc_offset, struct TbDate *date, struct TbTime *time);
+    
 uint64_t LbSystemClockMilliseconds(void);
 TbResult LbDate(struct TbDate *curr_date);
 TbResult LbDateTime(struct TbDate *curr_date, struct TbTime *curr_time);
@@ -95,15 +97,14 @@ struct FrametimeMeasurements {
 
 extern int debug_display_frametime;
 extern void initial_time_point();
-extern long double get_time_tick_ns();
+extern int64_t get_time_tick_ns();
 extern void frametime_start_measurement(int frametime_kind);
 extern void frametime_end_measurement(int frametime_kind);
 extern void framerate_measurement_capture(int framerate_kind);
-extern float get_delta_time();
 
 extern struct FrametimeMeasurements frametime_measurements;
 
-int get_current_stutter_percentage(void);
+int get_current_stutter_milliseconds(void);
 
 extern int stutter_detection_current;
 extern int stutter_detection_average;

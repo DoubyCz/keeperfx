@@ -20,6 +20,7 @@
 #define DK_CFGMAGIC_H
 
 #include "globals.h"
+#include "net_main.h"
 #include "bflib_basics.h"
 #include "creature_instances.h"
 #include "gui_soundmsgs.h"
@@ -198,12 +199,20 @@ enum ShotModelFlags {
 #define PwCast_OwnedObjects   (1LL << 32)
 #define PwCast_NeutrlObjects  (1LL << 33)
 #define PwCast_EnemyObjects   (1LL << 34)
+#define PwCast_OwnedObjectsPickup   (1LL << 35)
+#define PwCast_NeutrlObjectsPickup  (1LL << 36)
+#define PwCast_EnemyObjectsPickup   (1LL << 37)
+#define PwCast_OwnedObjectsSlap     (1LL << 38)
+#define PwCast_NeutrlObjectsSlap    (1LL << 39)
+#define PwCast_EnemyObjectsSlap     (1LL << 40)
 
 #define PwCast_AllCrtrs (PwCast_CustodyCrtrs|PwCast_OwnedCrtrs|PwCast_AlliedCrtrs|PwCast_EnemyCrtrs|PwCast_NConscCrtrs|PwCast_BoundCrtrs)
 #define PwCast_AllFood (PwCast_OwnedFood|PwCast_NeutrlFood|PwCast_EnemyFood)
 #define PwCast_AllGold (PwCast_OwnedGold|PwCast_NeutrlGold|PwCast_EnemyGold)
 #define PwCast_AllObjects (PwCast_OwnedObjects|PwCast_NeutrlObjects|PwCast_EnemyObjects)
-#define PwCast_AllThings (PwCast_CustodyCrtrs|PwCast_OwnedCrtrs|PwCast_AlliedCrtrs|PwCast_EnemyCrtrs|PwCast_AllFood|PwCast_AllGold|PwCast_OwnedSpell|PwCast_OwnedBoulders|PwCast_AllObjects)
+#define PwCast_AllObjectsPickup (PwCast_OwnedObjectsPickup|PwCast_NeutrlObjectsPickup|PwCast_EnemyObjectsPickup)
+#define PwCast_AllObjectsSlap (PwCast_OwnedObjectsSlap|PwCast_NeutrlObjectsSlap|PwCast_EnemyObjectsSlap)
+#define PwCast_AllThings (PwCast_CustodyCrtrs|PwCast_OwnedCrtrs|PwCast_AlliedCrtrs|PwCast_EnemyCrtrs|PwCast_AllFood|PwCast_AllGold|PwCast_OwnedSpell|PwCast_OwnedBoulders|PwCast_AllObjects|PwCast_AllObjectsPickup|PwCast_EnemyObjectsSlap)
 #define PwCast_AllGround (PwCast_UnclmdGround|PwCast_NeutrlGround|PwCast_OwnedGround|PwCast_AlliedGround|PwCast_EnemyGround)
 #define PwCast_NotEnemyGround (PwCast_UnclmdGround|PwCast_NeutrlGround|PwCast_OwnedGround|PwCast_AlliedGround)
 #define PwCast_AllTall (PwCast_NeutrlTall|PwCast_OwnedTall|PwCast_AlliedTall|PwCast_EnemyTall)
@@ -290,7 +299,7 @@ struct ShotConfigStats {
     short size_z;
     unsigned char fall_acceleration;
     unsigned char cast_spell_kind;
-    char push_on_hit;
+    int8_t push_on_hit;
     unsigned char destroy_on_first_hit;
     short experience_given_to_shooter;
     short inertia_floor;
@@ -317,7 +326,8 @@ struct ShotConfigStats {
     FuncIdx hit_thing_lua_func_idx;
 };
 
-typedef unsigned char (*Expand_Check_Func)(void);
+struct PlayerInfo;
+struct UserState;
 
 /**
  * Configuration parameters for powers.
@@ -427,7 +437,7 @@ extern const struct NamedCommand powermodel_properties_commands[];
 extern const struct LongNamedCommand powermodel_castability_commands[];
 extern const struct NamedCommand powermodel_expand_check_func_type[];
 extern const struct NamedCommand magic_power_commands[];
-extern const Expand_Check_Func powermodel_expand_check_func_list[];
+extern unsigned char (*const powermodel_expand_check_func_list[])(PlayerNumber plyr_idx, const struct UserState *ustate);
 extern const struct NamedCommand magic_use_func_commands[];
 extern const struct NamedCommand magic_cost_formula_commands[];
 /******************************************************************************/
@@ -455,6 +465,8 @@ TbBool is_power_available(PlayerNumber plyr_idx, PowerKind spl_idx);
 TbBool is_power_obtainable(PlayerNumber plyr_idx, PowerKind pwkind);
 TbBool add_power_to_player(PowerKind spl_idx, PlayerNumber plyr_idx);
 void remove_power_from_player(PowerKind spl_idx, PlayerNumber plyr_idx);
+TbBool decrease_power_level_of_player(PowerKind pwkind, PlayerNumber plyr_idx);
+void power_lost_side_effects(PowerKind pwkind, PlayerNumber plyr_idx);
 TbBool make_available_all_researchable_powers(PlayerNumber plyr_idx);
 /******************************************************************************/
 #ifdef __cplusplus

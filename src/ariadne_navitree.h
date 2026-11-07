@@ -37,6 +37,7 @@ extern long tree_val[TREEVALS_COUNT];
 
 #pragma pack()
 /******************************************************************************/
+void navitree_reset(void);
 void tags_init(void);
 long update_border_tags(long tag_id, int32_t *border_pt, long border_len);
 long border_tags_to_current(int32_t *border_pt, long border_len);
@@ -48,6 +49,7 @@ long copy_tree_to_route(long tag_start_id, long tag_end_id, int32_t *route_pts, 
 
 void delaunay_init(void);
 TbBool delaunay_add(long itm_pos);
+long delaunay_seeded(long start_x, long start_y, long end_x, long end_y, TbBool keep_edge);
 /******************************************************************************/
 #ifdef __cplusplus
 }

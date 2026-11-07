@@ -55,21 +55,19 @@ extern long lintel_bottom_height[256];
 
 #pragma pack()
 
-extern short td_to_fp_sprite_add[KEEPERSPRITE_ADD_NUM];
-extern short fp_to_td_sprite_add[KEEPERSPRITE_ADD_NUM];
+extern unsigned short td_to_fp_sprite_add[KEEPERSPRITE_ADD_NUM];
+extern unsigned short fp_to_td_sprite_add[KEEPERSPRITE_ADD_NUM];
 /******************************************************************************/
 extern unsigned short floor_to_ceiling_map[TEXTURE_BLOCKS_COUNT];
 extern struct WibbleTable blank_wibble_table[WIBBLE_TABLE_SIZE];
 /******************************************************************************/
-short get_td_animation_sprite(short animation_sprite);
+int32_t get_td_animation_sprite(int32_t animation_sprite);
 unsigned short get_render_animation_sprite(unsigned short animation_sprite);
 
 void init_fp_td_animation_conversion_tables(void);
 void setup_mesh_randomizers(void);
 
-TbBool load_ceiling_table(void);
-void generate_wibble_table(void);
-void fill_floor_heights_table(void);
+void engine_init(void);
 
 /******************************************************************************/
 #ifdef __cplusplus

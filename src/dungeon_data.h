@@ -194,7 +194,9 @@ struct Dungeon {
     CrtrExpLevel creature_max_level[CREATURE_TYPES_MAX];
     unsigned short creatures_annoyed;
     unsigned short battles_lost;
+    unsigned short battles_lost_vs[PLAYERS_COUNT+1];
     unsigned short battles_won;
+    unsigned short battles_won_vs[PLAYERS_COUNT+1];
     /** Amount of room tiles a player had which were destroyed (vandalized or damaged by enemy). */
     unsigned short rooms_destroyed;
     unsigned short spells_stolen;
@@ -236,7 +238,6 @@ struct Dungeon {
     struct DiggerStack digger_stack[DIGGER_TASK_MAX_COUNT];
     uint32_t digger_stack_update_turn;
     uint32_t digger_stack_length;
-    unsigned char visible_event_idx;
     /** Array with battle indexes with the battles currently visible in fight event message */
     unsigned char visible_battles[3];
     short zoom_annoyed_creature_idx;

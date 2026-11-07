@@ -381,6 +381,14 @@ const struct LongNamedCommand powermodel_castability_commands[] = {
   {"OWNED_OBJECTS",    PwCast_OwnedObjects},
   {"NEUTRL_OBJECTS",   PwCast_NeutrlObjects},
   {"ENEMY_OBJECTS",    PwCast_EnemyObjects},
+  {"ALL_OBJECTS_PICKUP",      PwCast_AllObjectsPickup},
+  {"OWNED_OBJECTS_PICKUP",    PwCast_OwnedObjectsPickup},
+  {"NEUTRL_OBJECTS_PICKUP",   PwCast_NeutrlObjectsPickup},
+  {"ENEMY_OBJECTS_PICKUP",    PwCast_EnemyObjectsPickup},
+  {"ALL_OBJECTS_SLAP",      PwCast_AllObjectsSlap},
+  {"OWNED_OBJECTS_SLAP",    PwCast_OwnedObjectsSlap},
+  {"NEUTRL_OBJECTS_SLAP",   PwCast_NeutrlObjectsSlap},
+  {"ENEMY_OBJECTS_SLAP",    PwCast_EnemyObjectsSlap},
   {NULL,                0},
   };
 
@@ -440,7 +448,7 @@ const struct NamedCommand magic_use_func_commands[] = {
 };
 
 
-const Expand_Check_Func powermodel_expand_check_func_list[] = {
+unsigned char (*const powermodel_expand_check_func_list[])(PlayerNumber plyr_idx, const struct UserState *ustate) = {
   NULL,
   general_expand_check,
   sight_of_evil_expand_check,
@@ -495,8 +503,8 @@ static const struct NamedField magic_powers_named_fields[] = {
     {"DURATION",       0, field_t(struct PowerConfigStats, duration),               0, INT32_MIN,UINT32_MAX, NULL,                                value_default,   assign_default},
     {"CASTABILITY",   -1, field_t(struct PowerConfigStats, can_cast_flags),         0,         0,UINT64_MAX, (struct NamedCommand*)powermodel_castability_commands, value_longflagsfield,   assign_default},
     {"ARTIFACT",       0, field_t(struct PowerConfigStats, artifact_model),         0, INT32_MIN,UINT32_MAX, object_desc,                         value_default,   assign_artifact},
-    {"NAMETEXTID",     0, field_t(struct PowerConfigStats, name_stridx),            0, INT32_MIN,UINT32_MAX, NULL,                                value_default,   assign_default},
-    {"TOOLTIPTEXTID",  0, field_t(struct PowerConfigStats, tooltip_stridx),         0, INT32_MIN,UINT32_MAX, NULL,                                value_default,   assign_default},
+    {"NAMETEXTID",     0, field_t(struct PowerConfigStats, name_stridx),            0, INT32_MIN,UINT32_MAX, NULL,                                value_stringId,   assign_default},
+    {"TOOLTIPTEXTID",  0, field_t(struct PowerConfigStats, tooltip_stridx),         0, INT32_MIN,UINT32_MAX, NULL,                                value_stringId,   assign_default},
     {"SYMBOLSPRITES",  0, field_t(struct PowerConfigStats, bigsym_sprite_idx),      0, INT32_MIN,UINT32_MAX, NULL,                                value_icon,      assign_icon},
     {"SYMBOLSPRITES",  1, field_t(struct PowerConfigStats, medsym_sprite_idx),      0, INT32_MIN,UINT32_MAX, NULL,                                value_icon,      assign_icon},
     {"POINTERSPRITES", 0, field_t(struct PowerConfigStats, pointer_sprite_idx),     0, INT32_MIN,UINT32_MAX, NULL,                                value_icon,      assign_icon},
@@ -750,7 +758,7 @@ TbBool parse_magic_spell_blocks(char *buf, long len, const char *config_textname
           {
               k = atoi(word_buf);
               if (k == 0 && word_buf[0] != '0')
-                  k = (int)get_sound_id(word_buf);
+                  k = sound_id_from_text(word_buf);
               spconf->caster_affect_sound = k;
               n++;
           }
@@ -1394,22 +1402,32 @@ TbBool add_power_to_player(PowerKind pwkind, PlayerNumber plyr_idx)
 
 void remove_power_from_player(PowerKind pwkind, PlayerNumber plyr_idx)
 {
+    if (decrease_power_level_of_player(pwkind, plyr_idx) && (get_dungeon(plyr_idx)->magic_level[pwkind] == 0))
+        power_lost_side_effects(pwkind, plyr_idx);
+}
+
+TbBool decrease_power_level_of_player(PowerKind pwkind, PlayerNumber plyr_idx)
+{
     struct Dungeon* dungeon = get_dungeon(plyr_idx);
-    struct PlayerInfo* player;
-    struct Thing* thing;
     if (dungeon_invalid(dungeon))
     {
         ERRORLOG("Cannot remove spell %s from invalid dungeon %d!",power_code_name(pwkind),(int)plyr_idx);
-        return;
+        return false;
     }
     long i = dungeon->magic_level[pwkind];
     if (i < 1)
     {
         ERRORLOG("Cannot remove spell %s (%d) from player %d as he doesn't have it!",power_code_name(pwkind),(int)pwkind,(int)plyr_idx);
-        return;
+        return false;
     }
     SYNCDBG(4,"Decreasing spell %s of player %d to level %d",power_code_name(pwkind),(int)plyr_idx,(int)i-1);
     dungeon->magic_level[pwkind] = i-1;
+    return true;
+}
+
+void power_lost_side_effects(PowerKind pwkind, PlayerNumber plyr_idx)
+{
+    struct Thing* thing;
     switch (pwkind)
     {
     case PwrK_OBEY:
@@ -1425,11 +1443,13 @@ void remove_power_from_player(PowerKind pwkind, PlayerNumber plyr_idx)
             turn_off_power_call_to_arms(plyr_idx);
         break;
     case PwrK_POSSESS:
-        player = get_player(plyr_idx);
-        if (player->view_type == PVT_CreatureContrl)
+        for (NetUserId user = 0; user < MAX_NET_USERS; user++)
         {
-            thing = thing_get(player->controlled_thing_idx);
-            prepare_to_controlled_creature_death(thing);
+            if (get_net_user_player_number(user) == plyr_idx && get_user_view_type(user) == PVT_CreatureContrl)
+            {
+                thing = thing_get(get_user_state(user)->controlled_thing_idx);
+                prepare_to_controlled_creature_death(thing);
+            }
         }
         break;
     }

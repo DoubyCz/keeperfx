@@ -17,6 +17,7 @@
  */
 /******************************************************************************/
 #include "pre_inc.h"
+#include "kfx/renderer/RendererManager.h"
 #include "front_landview.h"
 
 #include "globals.h"
@@ -43,6 +44,7 @@
 #include "room_list.h"
 #include "vidfade.h"
 #include "vidmode.h"
+#include "custom_sprites.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -91,6 +93,8 @@ void frontmap_zoom_in_init(LevelNumber lvnum);
 TbBool frontmap_input_active_ensign(long curr_mx, long curr_my);
 TbBool frontmap_update_zoom(void);
 
+#define RANDOM_PLAYER_GREY 40
+
 TbPixel net_player_colours[] = { 251, 58, 182, 11 };
 const int32_t hand_limp_xoffset[] = { 32, 31, 30, 29, 28, 27, 26, 24, 22, 19, 15, 9 };
 const int32_t hand_limp_yoffset[] = { -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0 };
@@ -124,11 +128,6 @@ static void update_net_ensigns_visibility(void)
     }
 }
 
-static TbBool is_connected_screen_packet(const struct ScreenPacket *nspck)
-{
-    return (nspck->networkstatus_flags & NetStat_PlayerConnected) != 0;
-}
-
 static void set_screen_packet_position(struct ScreenPacket *nspck, int32_t x, int32_t y)
 {
     nspck->stored_data1 = x;
@@ -154,8 +153,9 @@ void frontnetmap_unload(void)
     free_spritesheet(&map_flag);
     free_spritesheet(&map_hand);
     fe_network_active = 0;
-    stop_music();
+    stop_music(false);
     set_music_volume(settings.music_volume);
+    LbTextInvalidateFontGeneration();
 }
 
 static int32_t get_hand_limp_frame(TbClockMSec now)
@@ -258,7 +258,7 @@ static void get_hand_packet(PlayerNumber plyr_idx, struct ScreenPacket *nspck, i
     nspck->action_par1 = fe_net_level_selected;
     set_screen_packet_position(nspck, GetMouseX()*16/units_per_pixel_landview + map_info.screen_shift_x, GetMouseY()*16/units_per_pixel_landview + map_info.screen_shift_y);
     LevelNumber selected_level_number = get_selected_level_number();
-    if ((my_player_number == get_host_player_id()) && (selected_level_number > SINGLEPLAYER_NOTSTARTED)) {
+    if (network_is_host() && (selected_level_number > SINGLEPLAYER_NOTSTARTED)) {
         screen_packet_set_action(nspck, NetAct_HostStartLevel);
         nspck->action_par1 = selected_level_number;
         return;
@@ -309,15 +309,20 @@ static void draw_netmap_players_hands(void)
             slap_frame = get_slap_anim_frame(net_map_local.local_slap_anim_start, now);
         }
         get_hand_packet(i, &nspck, slap_frame, now);
-        plyr_nam = network_player_name(i);
-        colr = net_player_colours[i];
+        plyr_nam = network_user_name(i);
+        colr = net_player_colours[0];
+        if (net_player_colour[i] == NET_PLAYER_COLOUR_RANDOM) {
+            colr = LbPaletteFindColour(frontend_palette, RANDOM_PLAYER_GREY, RANDOM_PLAYER_GREY, RANDOM_PLAYER_GREY);
+        } else if (net_player_colour[i] >= 0) {
+            colr = net_player_colours[net_player_colour[i]];
+        }
         spr = get_hand_sprite_for_packet(&nspck, anim_frame, &x, &y);
         x -= (long)map_info.screen_shift_x;
         y -= (long)map_info.screen_shift_y;
         LbSpriteDrawResized(scale_value_landview(x), scale_value_landview(y), units_per_pixel_landview, spr);
         w = LbTextStringWidth(plyr_nam);
         if (w > 0) {
-            lbDisplay.DrawFlags = 0;
+            RendererSetDrawFlags(0);
             h = LbTextHeight(level_name);
             y += 32;
             x += 32;
@@ -331,7 +336,7 @@ void frontnetmap_draw(void)
 {
     SYNCDBG(8,"Starting");
     LbTextSetFont(map_font);
-    LbTextSetWindow(0, 0, lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
+    LbTextSetWindow(0, 0, RendererPhysicalWidth(), lbDisplay.PhysicalScreenHeight);
     if ((map_info.fadeflags & MLInfoFlg_Zooming) != 0) {
         frontzoom_to_point(map_info.hotspot_imgpos_x, map_info.hotspot_imgpos_y, map_info.fade_pos);
         compressed_window_draw();
@@ -383,13 +388,13 @@ void frontnetmap_input(void)
         return;
     }
 
-    net_level_hilighted = SINGLEPLAYER_NOTSTARTED;
+    net_level_highlighted = SINGLEPLAYER_NOTSTARTED;
     frontmap_input_active_ensign(GetMouseX(), GetMouseY());
     if (mouse_over_lvnum > 0) {
-        net_level_hilighted = mouse_over_lvnum;
+        net_level_highlighted = mouse_over_lvnum;
     }
-    if ((net_level_hilighted > 0) && can_select && left_button_clicked) {
-        fe_net_level_selected = net_level_hilighted;
+    if ((net_level_highlighted > 0) && can_select && left_button_clicked) {
+        fe_net_level_selected = net_level_highlighted;
         left_button_clicked = 0;
         set_level_name_text(fe_net_level_selected, NULL);
         SYNCLOG("Selected level %d with description \"%s\"",(int)fe_net_level_selected,level_name);
@@ -425,6 +430,9 @@ TbBool frontnetmap_load(void)
         map_flag = load_spritesheet("ldata/netflag_ens.dat", "ldata/netflag_ens.tab");
         break;
     }
+    
+    map_flag = load_custom_ensigns_into_sheet(map_flag, frontend_palette); 
+    pop_palette_remap();
     map_font = load_spritesheet("ldata/netfont.dat", "ldata/netfont.tab");
     prepare_file_path_buf(hand_data_path, sizeof(hand_data_path), FGrp_LandView, "maphand.dat");
     prepare_file_path_buf(hand_index_path, sizeof(hand_index_path), FGrp_LandView, "maphand.tab");
@@ -436,16 +444,17 @@ TbBool frontnetmap_load(void)
         free_spritesheet(&map_hand);
         unload_map_and_window();
         frontend_load_data_reset();
+        LbTextInvalidateFontGeneration();
         return false;
     }
     frontend_load_data_reset();
     frontmap_zoom_skip_init(SINGLEPLAYER_NOTSTARTED);
     fe_net_level_selected = SINGLEPLAYER_NOTSTARTED;
-    net_level_hilighted = SINGLEPLAYER_NOTSTARTED;
+    net_level_highlighted = SINGLEPLAYER_NOTSTARTED;
     set_pointer_graphic_none();
-    LbMouseSetPosition(lbDisplay.PhysicalScreenWidth/2, lbDisplay.PhysicalScreenHeight/2);
+    LbMouseSetPosition(RendererPhysicalWidth()/2, lbDisplay.PhysicalScreenHeight/2);
     map_sound_fade = FULL_LOUDNESS;
-    lbDisplay.DrawFlags = 0;
+    RendererSetDrawFlags(0);
     set_music_volume(settings.music_volume);
     frontmap_start_music();
     if (fe_network_active) {
@@ -506,8 +515,8 @@ static LevelNumber frontnetmap_update_players(void)
     if (!fe_network_active && (fe_net_level_selected > SINGLEPLAYER_NOTSTARTED)) {
         return fe_net_level_selected;
     }
-    const PlayerNumber host_player_number = get_host_player_id();
-    const TbBool can_start_level = (my_player_number == host_player_number) && (get_selected_level_number() <= SINGLEPLAYER_NOTSTARTED);
+    const TbBool level_not_selected = get_selected_level_number() <= SINGLEPLAYER_NOTSTARTED;
+    const TbBool can_start_level = network_is_host() && level_not_selected;
     struct ScreenPacket* my_nspck = &net_screen_packet[my_player_number];
     TbBool slap_hit_confirmed = false;
     int32_t leading_votes = 0;
@@ -515,32 +524,30 @@ static LevelNumber frontnetmap_update_players(void)
     if (can_start_level) {
         memset(scratch, 0, PALETTE_SIZE);
     }
-    for (int32_t i = 0; i < MAX_NET_USERS; i++) {
+    for (NetUserId i = 0; i < MAX_NET_USERS; i++) {
         struct ScreenPacket* nspck = &net_screen_packet[i];
         unsigned char action;
         TbBool remote_player;
+        TbBool host_player;
         if (!is_connected_screen_packet(nspck)) {
             continue;
         }
         remote_player = i != my_player_number;
-        if (remote_player && !network_player_active(i)) {
-            LbNetwork_EnableNewPlayers(1);
+        host_player = i == SERVER_ID;
+        if (remote_player && !network_user_active(i)) {
             frontend_set_state(FeSt_NET_START);
             return SINGLEPLAYER_NOTSTARTED;
         }
         if (nspck->action_par1 == LEVELNUMBER_ERROR) {
             if (network_is_active()) {
-                if (LbNetwork_EnableNewPlayers(1)) {
-                    ERRORLOG("Unable to enable new players joining exchange");
-                }
                 frontend_set_state(FeSt_NET_START);
             } else {
-                frontend_set_state(FeSt_MAIN_MENU);
+                frontend_set_state(FeSt_SKIRMISH_LOBBY);
             }
             return SINGLEPLAYER_NOTSTARTED;
         }
         action = screen_packet_action(nspck);
-        if ((i == host_player_number) && (action == NetAct_HostStartLevel) && (nspck->action_par1 > SINGLEPLAYER_NOTSTARTED)) {
+        if (host_player && (action == NetAct_HostStartLevel) && (nspck->action_par1 > SINGLEPLAYER_NOTSTARTED)) {
             return nspck->action_par1;
         }
         if (can_start_level) {
@@ -587,6 +594,7 @@ static LevelNumber frontnetmap_update_players(void)
     }
     if (can_start_level && (selected_level_number > SINGLEPLAYER_NOTSTARTED)) {
         set_selected_level_number(selected_level_number);
+        net_lobby_refresh_metadata();
     }
     return SINGLEPLAYER_NOTSTARTED;
 }
@@ -594,6 +602,9 @@ static LevelNumber frontnetmap_update_players(void)
 TbBool frontnetmap_update(void)
 {
     SYNCDBG(8,"Starting");
+    if (!frontnet_matchmaking_update()) {
+        return false;
+    }
     set_music_volume((map_sound_fade * settings.music_volume) / FULL_LOUDNESS);
 
     LevelNumber selected_level_number = SINGLEPLAYER_NOTSTARTED;
@@ -603,11 +614,14 @@ TbBool frontnetmap_update(void)
             return true;
         }
     } else {
-        frontmap_exchange_screen_packet();
+        if (!frontmap_exchange_screen_packet()) {
+            return false;
+        }
         selected_level_number = frontnetmap_update_players();
     }
     if (selected_level_number > 0) {
         set_selected_level_number(selected_level_number);
+        net_lobby_refresh_metadata();
         set_level_name_text(selected_level_number, NULL);
         if (fe_network_active < 1) {
             map_info.state_trigger = FeSt_START_KPRLEVEL;
@@ -615,9 +629,6 @@ TbBool frontnetmap_update(void)
             map_info.state_trigger = FeSt_START_MPLEVEL;
         }
         frontmap_zoom_in_init(selected_level_number);
-        if (!fe_network_active) {
-            fe_computer_players = 1;
-        }
     }
     SYNCDBG(8,"Normal end");
     return false;

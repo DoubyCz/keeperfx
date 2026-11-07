@@ -24,6 +24,7 @@
 
 #include "bflib_math.h"
 #include "bflib_planar.h"
+#include "ariadne_update.h"
 #include "cursor_tag.h"
 #include "thing_objects.h"
 #include "thing_list.h"
@@ -31,8 +32,6 @@
 #include "thing_effects.h"
 #include "config_terrain.h"
 #include "creature_senses.h"
-#include "ariadne.h"
-#include "ariadne_wallhug.h"
 #include "map_blocks.h"
 #include "map_ceiling.h"
 #include "map_utils.h"
@@ -219,7 +218,6 @@ TbBool add_key_on_door(struct Thing *thing)
 void unlock_door(struct Thing *thing)
 {
     thing->door.is_locked = false;
-    game.map_changed_for_navigation = 1;
     update_navigation_triangulation(thing->mappos.x.stl.num-1, thing->mappos.y.stl.num-1,
       thing->mappos.x.stl.num+1, thing->mappos.y.stl.num+1);
     panel_map_update(thing->mappos.x.stl.num-1, thing->mappos.y.stl.num-1, STL_PER_SLB, STL_PER_SLB);
@@ -236,7 +234,6 @@ void lock_door(struct Thing *doortng)
     doortng->active_state = DorSt_Closed;
     doortng->door.closing_counter = 0;
     doortng->door.is_locked = 1;
-    game.map_changed_for_navigation = 1;
     place_animating_slab_type_on_map(doorst->slbkind[doortng->door.orientation], 0, stl_x, stl_y, doortng->owner);
     update_navigation_triangulation(stl_x-1,  stl_y-1, stl_x+1,stl_y+1);
     panel_map_update(stl_x-1, stl_y-1, STL_PER_SLB, STL_PER_SLB);
@@ -285,12 +282,11 @@ long destroy_door(struct Thing *doortng)
     struct SlabMap* slb = get_slabmap_block(slb_x, slb_y);
     place_slab_type_on_map(SlbT_CLAIMED, stl_x, stl_y, slabmap_owner(slb), 0);
     do_slab_efficiency_alteration(slb_x, slb_y);
-    for (int i = 0; i < PLAYERS_COUNT; i++)
+    for (NetUserId user = 0; user < MAX_NET_USERS; user++)
     {
-        struct PlayerInfo* player = get_player(i);
-        if (!player_exists(player))
+        if (!player_exists(get_user_player(user)))
             continue;
-        struct Thing* thing = thing_get(player->controlled_thing_idx);
+        struct Thing* thing = thing_get(get_user_state(user)->controlled_thing_idx);
         if (thing == INVALID_THING)
             continue;
         MapCoordDelta dist = get_chessboard_distance(&pos, &thing->mappos);
@@ -807,7 +803,7 @@ void script_place_door(PlayerNumber plyridx, ThingModel doorkind, MapSlabCoord s
     MapSubtlCoord stl_y = slab_subtile_center(slb_y);
     TbBool success;
 
-    if (tag_cursor_blocks_place_door(plyridx, stl_x, stl_y))
+    if (tag_cursor_blocks_place_door(plyridx, -1, stl_x, stl_y))
     {
         if (!free)
         {
@@ -855,6 +851,5 @@ void update_navigation_around_all_doors()
             break;
         }
     }
-    game.map_changed_for_navigation = 1;
 }
 /******************************************************************************/

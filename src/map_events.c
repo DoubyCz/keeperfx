@@ -31,6 +31,7 @@
 #include "config_campaigns.h"
 #include "config_creature.h"
 #include "config_trapdoor.h"
+#include "frontmenu_ingame_evnt.h"
 #include "gui_frontmenu.h"
 #include "frontend.h"
 #include "room_workshop.h"
@@ -180,6 +181,8 @@ EventIndex event_create_event_or_update_old_event(MapCoord map_x, MapCoord map_y
 
 void event_initialise_all(void)
 {
+    my_visible_event_idx = 0;
+    memset(my_event_button_state, 0, EVENTS_COUNT);
     for (int i = 0; i < DUNGEONS_COUNT; i++)
     {
         struct Dungeon* dungeon = get_dungeon(i);
@@ -190,15 +193,14 @@ void event_initialise_all(void)
     }
 }
 
-long event_move_player_towards_event(struct PlayerInfo *player, long event_idx)
+TbBool event_move_user_towards_event(NetUserId user, EventIndex event_idx)
 {
     struct Event* event = &game.event[event_idx];
-
-    player->zoom_to_pos_x = event->mappos_x;
-    player->zoom_to_pos_y = event->mappos_y;
-
-    set_player_instance(player, PI_ZoomToPos, 0);
-    return 1;
+    struct UserState *ustate = get_user_state(user);
+    ustate->zoom_to_pos_x = event->mappos_x;
+    ustate->zoom_to_pos_y = event->mappos_y;
+    set_user_instance(user, PI_ZoomToPos, 0);
+    return true;
 }
 
 struct Event *event_create_event(MapCoord map_x, MapCoord map_y, EventKind evkind, unsigned char dngn_id, int32_t target)
@@ -247,12 +249,14 @@ struct Event *event_allocate_free_event_structure(void)
 
 void event_initialise_event(struct Event *event, MapCoord map_x, MapCoord map_y, EventKind evkind, unsigned char dngn_id, int32_t target)
 {
+    my_event_button_state[event->index] = 0;
     event->mappos_x = map_x;
     event->mappos_y = map_y;
     event->kind = evkind;
     event->owner = dngn_id;
     event->lifespan_turns = event_button_info[evkind].lifespan_turns;
     event->target = target;
+    event->icon_idx = -1;
     event->flags |= EvF_BtnFirstFall;
 }
 
@@ -344,10 +348,8 @@ void event_add_to_event_buttons_list_or_replace_button(struct Event *event, stru
         {
             evidx = dungeon->event_button_index[i];
             if (evidx == 0) {
-                if (is_my_player_number(dungeon->owner))
-                {
-                    struct PlayerInfo* player = get_player(dungeon->owner);
-                    if ( (get_gameturn() > 10) && (player->view_type != PVT_DungeonTop || (game.operation_flags & GOF_ShowGui)) )
+                if (is_my_player_number(dungeon->owner)) {
+                    if ( (get_gameturn() > 10) && (get_user_view_type(get_displayed_user()) != PVT_DungeonTop || local_state.show_gui) )
                     {
                         play_non_3d_sample(snd_tab_fall);
                     }
@@ -373,30 +375,32 @@ void event_reset_scroll_window(void)
     game.evntbox_scroll_window.window_height = 0;
 }
 
-void go_on_then_activate_the_event_box(PlayerNumber plyr_idx, EventIndex evidx)
+void activate_event_box(EventIndex evidx)
 {
     struct CreatureModelConfig* crconf;
     struct DoorConfigStats *doorst;
     struct TrapConfigStats *trapst;
     struct Thing *thing;
     int i;
-    struct Dungeon* dungeon = get_players_num_dungeon(plyr_idx);
+    PlayerNumber plyr_idx = my_player_number;
+    struct Dungeon* dungeon = get_my_dungeon();
     struct Event* event = &game.event[evidx];
     SYNCDBG(6,"Starting for event kind %d",event->kind);
-    dungeon->visible_event_idx = evidx;
-    if (is_my_player_number(plyr_idx))
-    {
-        i = event_button_info[event->kind].msg_stridx;
-        strcpy(game.evntbox_scroll_window.text, get_string(i));
-    }
+    my_visible_event_idx = evidx;
+    my_event_button_state[evidx] |= EvBtnS_Read;
+    i = event_button_info[event->kind].msg_stridx;
+    strcpy(game.evntbox_scroll_window.text, get_string(i));
     if ((event->kind == EvKind_FriendlyFight) || (event->kind == EvKind_EnemyFight)) {
+        // Restart the list of visible battles from the first one; the other slots are
+        // refilled by maintain_my_battle_list(), which skips battles already on the list.
+        // Overwriting just the first slot could put the same battle on the list twice.
         dungeon->visible_battles[0] = find_first_battle_of_mine(plyr_idx);
+        dungeon->visible_battles[1] = 0;
+        dungeon->visible_battles[2] = 0;
     }
-    if (is_my_player_number(plyr_idx))
+    short other_off = 0;
+    switch (event->kind)
     {
-        short other_off = 0;
-        switch (event->kind)
-        {
         case EvKind_HeartAttacked:
         case EvKind_Breach:
             other_off = 1;
@@ -535,10 +539,8 @@ void go_on_then_activate_the_event_box(PlayerNumber plyr_idx, EventIndex evidx)
             break;
         case EvKind_Information:
             i = (long)event->target;
-            // Negative target means the information was not displayed yet
             if (i < 0) {
                 i = -i;
-                event->target = i;
             }
             snprintf(game.evntbox_text_buffer, sizeof(game.evntbox_text_buffer), "%s", get_string(i));
             snprintf(game.evntbox_scroll_window.text, sizeof(game.evntbox_scroll_window.text), "%s", game.evntbox_text_buffer);
@@ -576,10 +578,8 @@ void go_on_then_activate_the_event_box(PlayerNumber plyr_idx, EventIndex evidx)
             break;
         case EvKind_QuickInformation:
             i = (long)event->target;
-            // Negative target means the information was not displayed yet
             if (i < 0) {
               i = -i;
-              event->target = i;
             }
             snprintf(game.evntbox_text_buffer, sizeof(game.evntbox_text_buffer), "%s", game.quick_messages[i % QUICK_MESSAGES_COUNT]);
             snprintf(game.evntbox_scroll_window.text, sizeof(game.evntbox_scroll_window.text), "%s", game.evntbox_text_buffer);
@@ -589,15 +589,14 @@ void go_on_then_activate_the_event_box(PlayerNumber plyr_idx, EventIndex evidx)
         default:
             ERRORLOG("Undefined event kind: %d", (int)event->kind);
             break;
-        }
-        event_reset_scroll_window();
-        if (other_off)
-        {
-            turn_off_menu(GMnu_BATTLE);
-            turn_off_menu(GMnu_DUNGEON_SPECIAL);
-            turn_off_menu(GMnu_RESURRECT_CREATURE);
-            turn_off_menu(GMnu_TRANSFER_CREATURE);
-        }
+    }
+    event_reset_scroll_window();
+    if (other_off)
+    {
+        turn_off_menu(GMnu_BATTLE);
+        turn_off_menu(GMnu_DUNGEON_SPECIAL);
+        turn_off_menu(GMnu_RESURRECT_CREATURE);
+        turn_off_menu(GMnu_TRANSFER_CREATURE);
     }
     SYNCDBG(8,"Finished");
 }
@@ -614,6 +613,7 @@ void maintain_my_event_list(struct Dungeon *dungeon)
                 dungeon->event_button_index[i-1] = curr_ev_idx;
                 dungeon->event_button_index[i] = 0;
                 struct Event* event = &game.event[curr_ev_idx];
+                event->flags |= EvF_BtnFalling;
                 if (flag_is_set(event->flags,EvF_BtnFirstFall))
                 {
                     if ((i == 1) || ((i >= 2) && dungeon->event_button_index[i-2] != 0))
@@ -709,7 +709,7 @@ void event_process_events(void)
             continue;
         }
         struct PlayerInfo*player = get_player(event->owner);
-        if (player->view_type <= PVT_DungeonTop) //Freeze lifespan of events of human player on map or possession
+        if (get_user_view_type(get_player_primary_user(player)) <= PVT_DungeonTop) //Freeze lifespan of events of human player on map or possession
         {
             if (event->lifespan_turns > 0) {
                 event->lifespan_turns--;
@@ -720,27 +720,24 @@ void event_process_events(void)
             int ev_owner = event->owner;
             EventIndex subev_idx = event->index;
             struct Dungeon* dungeon = get_dungeon(ev_owner);
-            if (dungeon->visible_event_idx != subev_idx)
+            struct Event* subevent = &game.event[subev_idx];
+            event_update_last_use(subevent);
+            for (int j = 0; j <= EVENT_BUTTONS_COUNT; j++)
             {
-                struct Event* subevent = &game.event[subev_idx];
-                event_update_last_use(subevent);
-                for (int j = 0; j <= EVENT_BUTTONS_COUNT; j++)
-                {
-                    if (dungeon->event_button_index[j] == subev_idx) {
-                        turn_off_event_box_if_necessary(ev_owner, dungeon->event_button_index[j]);
-                        dungeon->event_button_index[j] = 0;
-                        break;
-                    }
+                if (dungeon->event_button_index[j] == subev_idx) {
+                    turn_off_event_box_if_necessary(ev_owner, dungeon->event_button_index[j]);
+                    dungeon->event_button_index[j] = 0;
+                    break;
                 }
-                event_delete_event_structure(subev_idx);
             }
+            event_delete_event_structure(subev_idx);
         }
     }
 }
 
 void update_all_events(void)
 {
-    for (long i = EVENTS_COUNT; i > 0; i--)
+    for (int32_t i = EVENTS_COUNT - 1; i > 0; i--)
     {
         struct Thing* thing = event_is_attached_to_thing(i);
         if (thing_exists(thing))
@@ -805,6 +802,8 @@ void remove_events_thing_is_attached_to(struct Thing *thing)
 void clear_events(void)
 {
     int i;
+    my_visible_event_idx = 0;
+    memset(my_event_button_state, 0, EVENTS_COUNT);
     for (i=0; i < EVENTS_COUNT; i++)
     {
       memset(&game.event[i], 0, sizeof(struct Event));

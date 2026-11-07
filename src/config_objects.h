@@ -58,6 +58,7 @@ enum ObjectModelFlags {
     OMF_Heart                = 0x0040, // Functions as the heart of the dungeon
     OMF_HoldInHand           = 0x0080, // Object can be picked up to hold
     OMF_IgnoredByImps        = 0x0100, // Specialdiggers don't dragging this object
+    OMF_Slappable            = 0x0200, // Object can be slapped
 };
 
 
@@ -93,12 +94,14 @@ struct ObjectConfigStats {
     short tooltip_stridx;
     TbBool tooltip_optional;
     HitPoints health;
-    char fall_acceleration;
-    char light_unaffected;
-    char immobile;
+    int8_t fall_acceleration;
+    int16_t inertia_floor;
+    int16_t inertia_air;
+    int8_t light_unaffected;
+    int8_t immobile;
     struct InitLight ilght;
-    short sprite_anim_idx;
-    short sprite_anim_idx_in_hand;
+    unsigned short sprite_anim_idx;
+    unsigned short sprite_anim_idx_in_hand;
     short anim_speed;
     short size_xy;
     short size_z;

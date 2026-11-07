@@ -14,9 +14,10 @@
 #include "creature_states_pray.h"
 #include "gui_msgs.h"
 #include "gui_soundmsgs.h"
-#include "thing_navigate.h"
 #include "map_data.h"
 #include "game_legacy.h"
+#include "game_merge.h"
+#include "bflib_datetm.h"
 #include "player_utils.h"
 #include "lvl_script_lib.h"
 #include "room_library.h"
@@ -30,9 +31,10 @@
 
 #include "lua_base.h"
 #include "lua_params.h"
-#include "lua_api_lens.h"
 #include "lua_api_sound.h"
 
+
+#include <zlib.h>
 
 #include "post_inc.h"
 
@@ -124,19 +126,27 @@ static int lua_Ally_players(lua_State *L)
 static int lua_Start_money(lua_State *L)
 {
     struct PlayerRange player_range = luaL_checkPlayerRange(L, 1);
-    GoldAmount gold_val = luaL_checkinteger(L, 2);
-
+    GoldAmount gold_base = luaL_checkinteger(L, 2);
+    if (gold_base > SENSIBLE_GOLD)
+    {
+        gold_base = SENSIBLE_GOLD;
+        SCRPTWRNLOG("Gold added to players reduced to %d", SENSIBLE_GOLD);
+    }
+    GoldAmount gold_val = 0;
     for (PlayerNumber i = player_range.start_idx; i < player_range.end_idx; i++)
     {
-        if (gold_val > SENSIBLE_GOLD)
-        {
-            gold_val = SENSIBLE_GOLD;
-            SCRPTWRNLOG("Gold added to player reduced to %d", SENSIBLE_GOLD);
+
+        struct Dungeon* dungeon = get_dungeon(i);
+        if (dungeon_invalid(dungeon)) {
+            continue;
         }
-        player_add_offmap_gold(i, gold_val);
+        gold_val = gold_base-dungeon->offmap_money_owned;
+        if (gold_val != 0)
+        {
+            player_add_offmap_gold(i, gold_val);
+        }
     }
     return 0;
-
 }
 
 static int lua_Max_creatures(lua_State *L)
@@ -387,6 +397,20 @@ static int lua_Set_next_level(lua_State *L)
     }
 
     intralvl.next_level = lvnum;
+    if (is_bonus_level(game.loaded_level_number) || is_extra_level(game.loaded_level_number))
+    {
+        // Allow bonus levels to advance the campaign
+        set_continue_level_number(intralvl.next_level);
+    }
+    return 0;
+}
+
+static int lua_Trigger_action_point(lua_State *L)
+{
+    ActionPointId apt_idx = luaL_checkActionPoint(L, 1);
+    PlayerNumber player_range = luaL_checkPlayerRangeId(L, 2);
+
+    action_point_trigger_idx(apt_idx, player_range);
     return 0;
 }
 
@@ -726,7 +750,7 @@ static int lua_Display_message(lua_State *L)
 {
     int32_t msg_id = luaL_checkinteger(L, 1);
     const char *msg =  get_string(msg_id);
-    char id;
+    short id;
     char type;
     luaL_checkMessageIcon(L, 2, &type, &id);
 
@@ -735,10 +759,41 @@ static int lua_Display_message(lua_State *L)
     return 0;
 }
 
+static int lua_get_game_timestamp(lua_State *L)
+{
+    struct TbDate date;
+    struct TbTime time;
+    if (game.timestamp == 0 || !decode_posix_time(game.timestamp, game.timestamp_tz, &date, &time))
+    {
+        lua_pushnil(L);
+        return 1;
+    }
+    lua_createtable(L, 0, 9);
+    lua_pushinteger(L, date.Year);
+    lua_setfield(L, -2, "year");
+    lua_pushinteger(L, date.Month);
+    lua_setfield(L, -2, "month");
+    lua_pushinteger(L, date.Day);
+    lua_setfield(L, -2, "day");
+    lua_pushinteger(L, date.DayOfWeek);
+    lua_setfield(L, -2, "dow");
+    lua_pushinteger(L, time.Hour);
+    lua_setfield(L, -2, "hour");
+    lua_pushinteger(L, time.Minute);
+    lua_setfield(L, -2, "min");
+    lua_pushinteger(L, time.Second);
+    lua_setfield(L, -2, "sec");
+    lua_pushinteger(L, game.timestamp_tz);
+    lua_setfield(L, -2, "tz");
+    lua_pushinteger(L, game.timestamp_turn);
+    lua_setfield(L, -2, "turn");
+    return 1;
+}
+
 static int lua_Quick_message(lua_State *L)
 {
     const char *msg = lua_tostring(L, 1);
-    char id;
+    short id;
     char type;
     luaL_checkMessageIcon(L, 2, &type, &id);
 
@@ -865,19 +920,87 @@ static int lua_Display_variable(lua_State *L)
     int target = luaL_optinteger(L,3,0);
     unsigned char target_type = luaL_optinteger(L,4,0);
 
-    game.script_variable_player = player;
-    game.script_value_type = varib_type;
-    game.script_value_id = varib_id;
-    game.script_variable_target = target;
-    game.script_variable_target_type = target_type;
+    for (int i = DISPLAY_VARIABLES_LIMIT - 1; i > 0; i--)
+    {
+        memcpy(&game.script_variables[i], &game.script_variables[i-1], sizeof(struct ScriptVariable));
+    }    
+    game.script_variables[0].variable_player = player;
+    game.script_variables[0].value_type = varib_type;
+    game.script_variables[0].value_id = varib_id;
+    game.script_variables[0].variable_target = target;
+    game.script_variables[0].variable_target_type = target_type;    
+    game.script_variables[0].is_active = true;
+
+    game.script_variables[0].include_icon = false;
+    game.script_variables[0].icon_idx = -1;
+    if (game.active_script_var_count < DISPLAY_VARIABLES_LIMIT) {
+        game.active_script_var_count++;
+    }	
+    
+    game.flags_gui |= GGUI_Variable;
+
+    return 0;
+}
+
+
+static int lua_DISPLAY_VARIABLE_WITH_LABEL(lua_State *L)
+{
+    PlayerNumber player   = luaL_checkPlayerSingle(L, 1);
+    int32_t varib_id, varib_type;
+    luaL_checkVariable(L, 2, &varib_id, &varib_type);
+    for (int i = DISPLAY_VARIABLES_LIMIT - 1; i > 0; i--)
+    {
+        memcpy(&game.script_variables[i], &game.script_variables[i-1], sizeof(struct ScriptVariable));
+    }    
+    
+    short id;
+    char type;
+    luaL_checkMessageIcon(L, 3, &type, &id);
+    game.script_variables[0].variable_player = player;
+    game.script_variables[0].value_type = varib_type;
+    game.script_variables[0].value_id = varib_id;
+    game.script_variables[0].include_icon = true;    
+    game.script_variables[0].is_active = true;
+    game.script_variables[0].icon_idx = id;
+    if (game.active_script_var_count < DISPLAY_VARIABLES_LIMIT) {
+        game.active_script_var_count++;
+    }	
+    
     game.flags_gui |= GGUI_Variable;
 
     return 0;
 }
 
 static int lua_Hide_variable(lua_State *L)
-{
-    game.flags_gui &= ~GGUI_Variable;
+{    
+    int32_t varib_id, varib_type;
+    PlayerNumber player   = luaL_checkPlayerSingle(L, 1);
+    varib_id = -1;
+    varib_type = -1;
+    const char* variable = luaL_checkstring(L, 2);
+    if(variable[0] != '\0'){
+        luaL_checkVariable(L, 1, &varib_id, &varib_type);
+    }
+
+    if(varib_id > -1 && varib_type > -1)
+    {
+        for (int i = 0; i < DISPLAY_VARIABLES_LIMIT; i++)
+        {
+            if(game.script_variables[i].value_id == varib_id && game.script_variables[i].value_type == varib_type && game.script_variables[i].variable_player == player){
+                for (int j = i; j < game.active_script_var_count - 1; j++)
+                {
+                    game.script_variables[j] = game.script_variables[j+1];
+                }
+                game.active_script_var_count--;
+                break;
+            }
+        }        
+    } else {
+        memset(game.script_variables, 0, sizeof(game.script_variables));
+        game.active_script_var_count = 0;
+    }
+    if(game.active_script_var_count == 0)
+        game.flags_gui &= ~GGUI_Variable;
     return 0;
 }
 
@@ -1013,7 +1136,7 @@ static int lua_Add_shot_to_level(lua_State *L)
     int hittype            = luaL_checkNamedCommand(L, 4, hit_type_desc);
     struct Thing *target   = luaL_optCheckThing(L, 5);
     int32_t speed          = luaL_optCheckinteger(L, 6);
-
+    struct Thing *parent   = luaL_optCheckThing(L,7);
     ThingIndex target_index;
 
     if (thing_is_invalid(target))
@@ -1025,6 +1148,10 @@ static int lua_Add_shot_to_level(lua_State *L)
         target_index = target->index;
     }
     struct Thing* shottng = script_process_new_shot(shot_id, location, owner, target_index, hittype);
+    if((!thing_is_invalid(shottng)) && (!thing_is_invalid(parent)))
+    {
+        shottng->parent_idx = parent->index;
+    }
     lua_pushThing(L, shottng);
     if (!thing_is_invalid(target))
     {
@@ -1209,21 +1336,31 @@ static int lua_New_creature_type(lua_State* L)
     return 0;
 }
 
+static int lua_Copy_creature_type(lua_State* L)
+{
+    script_copy_creature_type(luaL_checkNamedCommand(L, 1, creature_desc),luaL_checkstring(L, 2));
+    return 0;
+}
+
 static int lua_Set_door_configuration(lua_State *L)
 {
     set_configuration(L, &trapdoor_door_named_fields_set, "SET_DOOR_CONFIGURATION");
+    create_manufacture_array_from_trapdoor_data();
     return 0;
 }
 
 static int lua_Set_object_configuration(lua_State *L)
 {
     set_configuration(L, &objects_named_fields_set, "SET_OBJECT_CONFIGURATION");
+    ThingModel model = luaL_checkNamedCommand(L, 1, object_desc);
+    update_all_objects_of_model(model);
     return 0;
 }
 
 static int lua_Set_trap_configuration(lua_State *L)
 {
     set_configuration(L, &trapdoor_trap_named_fields_set, "SET_TRAP_CONFIGURATION");
+    create_manufacture_array_from_trapdoor_data();
     return 0;
 }
 
@@ -1243,6 +1380,7 @@ static int lua_Set_effect_generator_configuration(lua_State *L)
 static int lua_Set_room_configuration(lua_State *L)
 {
     set_configuration(L, &terrain_room_named_fields_set, "SET_ROOM_CONFIGURATION");
+    update_room_tab_to_config();
     return 0;
 }
 
@@ -1751,7 +1889,7 @@ static int lua_Set_music(lua_State *L)
 
         long track_number = luaL_checkinteger(L, 1);
         if (track_number == 0) {
-            stop_music();
+            stop_music(true);
         }
         else {
             play_music_track(track_number);
@@ -1905,6 +2043,24 @@ static int lua_Use_special_Transfer_creature(lua_State *L)
         struct Thing *heartng = get_player_soul_container(plyr_idx);
         struct PlayerInfo* player = get_my_player();
         start_transfer_creature(player, heartng);
+    }
+    return 0;
+}
+
+static int lua_Use_special_Steal_hero(lua_State* L)
+{
+    PlayerNumber plyr_idx = luaL_checkPlayerSingle(L, 1);
+    TbMapLocation location = luaL_checkLocation(L, 2);
+    EffectOrEffElModel effect_id = luaL_checkEffectOrEffElModel(L, 3);
+
+    struct Coord3d pos;
+    if (get_coords_at_location(&pos, location, false))
+    {
+        steal_hero(get_player(plyr_idx), &pos);
+        if (effect_id != 0)
+        {
+            create_used_effect_or_element(&pos, effect_id, plyr_idx, 0);
+        }
     }
     return 0;
 }
@@ -2125,6 +2281,127 @@ static int lua_print(lua_State *L)
     JUSTLOG("%s", buffer); // Print using your logging function
 
     return 0;
+}
+
+// [u32 magic, big-endian][u32 decompressed length, little-endian][zlib(binser)]
+#define CUSTOM_INTRALEVEL_DATA_LUA_MAGIC 0x4C434901 /* LCI\1 (Lua Custom Intralevel v1) */
+
+// max(compressed size, decompressed size/64)
+static size_t custom_data_visible_size(size_t stored_len, size_t decompressed_len)
+{
+    size_t ratio_len = (decompressed_len + CUSTOM_INTRALEVEL_DATA_MAX_COMPRESSION_RATIO - 1) / CUSTOM_INTRALEVEL_DATA_MAX_COMPRESSION_RATIO;
+    return stored_len > ratio_len ? stored_len : ratio_len;
+}
+
+static int lua_set_custom_intralevel_data(lua_State *L)
+{
+    lua_settop(L, 1);
+    if (lua_isnil(L, 1))
+    {
+        clear_custom_intralevel_data();
+        lua_pushinteger(L, 0);
+        return 1;
+    }
+    lua_getglobal(L, "SerializeCustomIntralevelData");
+    lua_pushvalue(L, 1);
+    if (lua_pcall(L, 1, 1, 0) != 0)
+    {
+        WARNLOG("SetCustomCampaignData: %s", lua_tostring(L, -1));
+        lua_pushboolean(L, false);
+        return 1;
+    }
+    size_t decompressed_len;
+    const char *raw = lua_tolstring(L, -1, &decompressed_len);
+    if (custom_data_visible_size(0, decompressed_len) > CUSTOM_INTRALEVEL_DATA_MAX_SIZE)
+    {
+        WARNLOG("SetCustomCampaignData: %u bytes is over the maximum of %u", (unsigned)custom_data_visible_size(0, decompressed_len), (unsigned)CUSTOM_INTRALEVEL_DATA_MAX_SIZE);
+        lua_pushboolean(L, false);
+        return 1;
+    }
+    uLongf zlen = compressBound(decompressed_len);
+    unsigned char *data = (unsigned char *)malloc(8 + zlen);
+    if (data == NULL || compress2(data + 8, &zlen, (const Bytef *)raw, decompressed_len, Z_DEFAULT_COMPRESSION) != Z_OK)
+    {
+        free(data);
+        WARNLOG("SetCustomCampaignData: can't compress %u bytes", (unsigned)decompressed_len);
+        lua_pushboolean(L, false);
+        return 1;
+    }
+    const uint32_t header[2] = { u32be(CUSTOM_INTRALEVEL_DATA_LUA_MAGIC), u32le((uint32_t)decompressed_len) };
+    memcpy(data, header, 8);
+    size_t len = 8 + zlen;
+    size_t visible_len = custom_data_visible_size(len, decompressed_len);
+if (visible_len > CUSTOM_INTRALEVEL_DATA_MAX_SIZE)
+    {
+        free(data);
+        WARNLOG("SetCustomCampaignData: %u bytes is over the maximum of %u", (unsigned)visible_len, (unsigned)CUSTOM_INTRALEVEL_DATA_MAX_SIZE);
+        lua_pushboolean(L, false);
+        return 1;
+    }
+    TbBool ok = set_custom_intralevel_data(data, (uint32_t)len);
+    free(data);
+    if (!ok)
+    {
+        WARNLOG("SetCustomCampaignData: can't allocate %u bytes", (unsigned)len);
+        lua_pushboolean(L, false);
+        return 1;
+    }
+    lua_pushinteger(L, (lua_Integer)visible_len);
+    return 1;
+}
+
+// pushes the stored data (or nil) and returns its visible size (possibly 0)
+static size_t push_custom_intralevel_data(lua_State *L)
+{
+    if (custom_intralevel_data_len == 0)
+    {
+        lua_pushnil(L);
+        return 0;
+    }
+    const unsigned char *data = (const unsigned char *)custom_intralevel_data;
+    uint32_t header[2] = { 0, 0 };
+    if (custom_intralevel_data_len > 8)
+        memcpy(header, data, 8);
+    if (u32be(header[0]) != CUSTOM_INTRALEVEL_DATA_LUA_MAGIC)
+    {
+        ERRORLOG("GetCustomCampaignData: stored data format not recognized.");
+        lua_pushnil(L);
+        return custom_intralevel_data_len;
+    }
+    uLongf decompressed_len = u32le(header[1]);
+    size_t visible_len = custom_data_visible_size(custom_intralevel_data_len, decompressed_len);
+    if (visible_len > CUSTOM_INTRALEVEL_DATA_MAX_SIZE)
+    {
+        ERRORLOG("GetCustomCampaignData: the stored data is over the maximum size");
+        lua_pushnil(L);
+        return visible_len;
+    }
+    char *raw = (char *)malloc(decompressed_len);
+    uLongf len = decompressed_len;
+    if (raw == NULL || uncompress((Bytef *)raw, &len, data + 8, custom_intralevel_data_len - 8) != Z_OK || len != decompressed_len)
+    {
+        free(raw);
+        ERRORLOG("GetCustomCampaignData: the stored data is damaged");
+        lua_pushnil(L);
+        return visible_len;
+    }
+    lua_getglobal(L, "DeserializeCustomIntralevelData");
+    lua_pushlstring(L, raw, decompressed_len);
+    free(raw);
+    if (lua_pcall(L, 1, 1, 0) != 0)
+    {
+        ERRORLOG("GetCustomCampaignData: %s", lua_tostring(L, -1));
+        lua_pop(L, 1);
+        lua_pushnil(L);
+    }
+    return visible_len;
+}
+
+static int lua_get_custom_intralevel_data(lua_State *L)
+{
+    size_t visible_len = push_custom_intralevel_data(L);
+    lua_pushinteger(L, (lua_Integer)visible_len);
+    return 2;
 }
 
 
@@ -2416,6 +2693,7 @@ static const luaL_Reg global_methods[] = {
    {"AddBonusTime",                     lua_Add_bonus_time                  },
    {"ResetActionPoint",                 lua_Reset_action_point              },
    {"SetNextLevel",                     lua_Set_next_level                  },
+   {"TriggerActionPoint",               lua_Trigger_action_point            },
 
 //Adding New Creatures and Parties to the Level
    {"AddCreatureToLevel",               lua_Add_creature_to_level           },
@@ -2445,6 +2723,7 @@ static const luaL_Reg global_methods[] = {
    {"QuickPlayerInformationWithPos"         ,lua_Quick_player_information_with_pos      },
    {"DisplayMessage"                        ,lua_Display_message                 },
    {"QuickMessage"                          ,lua_Quick_message                   },
+   {"GetGameTimestamp"                      ,lua_get_game_timestamp              },
    {"ClearMessage"                          ,lua_Clear_message                   },
    {"HeartLostObjective"                    ,lua_Heart_lost_objective            },
    {"HeartLostQuickObjective"               ,lua_Heart_lost_quick_objective      },
@@ -2452,6 +2731,7 @@ static const luaL_Reg global_methods[] = {
    {"TutorialFlashButton"                   ,lua_Tutorial_flash_button           },
    {"DisplayCountdown"                      ,lua_Display_countdown               },
    {"DisplayVariable"                       ,lua_Display_variable                },
+   {"DisplayVariableWithLabel"              ,lua_DISPLAY_VARIABLE_WITH_LABEL     },
    {"HideVariable"                          ,lua_Hide_variable                   },
 
 //Manipulating Map
@@ -2474,6 +2754,7 @@ static const luaL_Reg global_methods[] = {
 
 //Manipulating Configs
     {"NewCreatureType"                      ,lua_New_creature_type               },
+    {"CopyCreatureType"                     ,lua_Copy_creature_type              },
     //{"NewObjectType"                      ,lua_New_object_type                 },
     //{"NewTrapType"                        ,lua_New_trap_type                   },
     //{"NewRoomType"                        ,lua_New_room_type                   },
@@ -2513,6 +2794,7 @@ static const luaL_Reg global_methods[] = {
    {"UseSpecialIncreaseLevel"           ,lua_Use_special_increase_level      },
    {"UseSpecialMultiplyCreatures"       ,lua_Use_special_multiply_creatures  },
    {"UseSpecialTransferCreature"        ,lua_Use_special_Transfer_creature   },
+   {"UseSpecialStealHero"               ,lua_Use_special_Steal_hero          },
    {"SetBoxTooltip"                     ,lua_Set_box_tooltip                 },
    {"SetBoxTooltipId"                   ,lua_Set_box_tooltip_id              },
    {"MakeSafe"                          ,lua_Make_safe                       },
@@ -2543,6 +2825,8 @@ static const luaL_Reg global_methods[] = {
 
 //debug stuff
     {"print"                             ,lua_print                     },
+    {"SetCustomCampaignData"             ,lua_set_custom_intralevel_data},
+    {"GetCustomCampaignData"             ,lua_get_custom_intralevel_data},
     {"RunDKScriptCommand"                ,lua_run_dkscript_command      },
 
 //retrieving lua vars

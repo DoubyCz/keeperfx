@@ -55,8 +55,8 @@ or [Steam](https://store.steampowered.com/app/1996630/Dungeon_Keeper_Gold/).
 
 KeeperFX runs natively on Linux. The easiest way is the **portable AppImage**,
 which runs on most modern x86_64 distributions (Ubuntu, Fedora, Linux Mint,
-Debian, Arch, …) **without installing any dependencies** — the engine, a modern
-SDL2, ffmpeg and all other libraries are bundled inside.
+Debian, Arch, …) **without installing any dependencies** - the engine, SDL3,
+ffmpeg and all other libraries are bundled inside.
 
 **⬇️ Download the latest Linux AppImage from the
 [Releases page](https://github.com/DoubyCz/keeperfx/releases/).**
@@ -81,22 +81,21 @@ then start the AppImage again. To use a different game folder, run
 
 ### Requirements & notes
 - **x86_64** only.
-- A reasonably **recent distribution**: the AppImage is built on Debian 12
-  (glibc 2.36), so it runs on Ubuntu 22.10+/24.04, Fedora 37+, Mint 22+,
-  Debian 12+, Arch and similar. Very old releases (e.g. Ubuntu 22.04 / Mint 21,
-  glibc 2.35) may be too old.
-- **FUSE** is needed to mount the AppImage. If your distribution lacks it,
-  install `libfuse2`, or run the AppImage with `--appimage-extract-and-run`.
+- A reasonably **recent distribution**: the AppImage is built on Ubuntu 24.04
+  (glibc 2.39), so it runs on Ubuntu 24.04+, Fedora 40+, Mint 22+, Debian 13+,
+  Arch and similar. Older releases (e.g. Debian 12, Ubuntu 22.04) are too old.
+- **FUSE 3** is needed to mount the AppImage (`fusermount3`, usually preinstalled).
+  If your distribution lacks it, run the AppImage with `--appimage-extract-and-run`.
 - The **first start** is a little slower (the image is mounted and the bundled
   data is copied into your game folder once).
 - Works on both **X11 and Wayland**, including **multi-monitor** setups.
 
 ### Arch Linux
-Arch users can also use the `keeperfx-git` AUR package, which builds from source
-and integrates natively, instead of the AppImage. *(planned)*
+Arch users can also use the [`keeperfx-git`](https://aur.archlinux.org/packages/keeperfx-git)
+AUR package, which builds from source and integrates natively, instead of the AppImage.
 
 ### Building the AppImage yourself
-The AppImage is built reproducibly in a Debian 12 container; see
+The AppImage is built reproducibly in an Ubuntu 24.04 container; see
 [`dist/linux/build-appimage.sh`](dist/linux/build-appimage.sh) and the
 [`Build Linux AppImage`](.github/workflows/linux-appimage.yml) workflow.
 

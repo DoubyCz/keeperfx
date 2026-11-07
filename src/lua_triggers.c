@@ -245,6 +245,18 @@ void lua_on_creature_rebirth(struct Thing* crtng)
     }
 }
 
+void lua_on_creature_fell_into_abyss(struct Thing *crtng)
+{
+    SYNCDBG(6, "Starting");
+    lua_getglobal(Lvl_script, "OnCreatureFellIntoAbyss");
+    if (lua_isfunction(Lvl_script, -1)) {
+        lua_pushThing(Lvl_script, crtng);
+        CheckLua(Lvl_script, lua_pcall(Lvl_script, 1, 0, 0), "OnCreatureFellIntoAbyss");
+    } else {
+        lua_pop(Lvl_script, 1);
+    }
+}
+
 
 void lua_on_apply_damage_to_thing(struct Thing *thing, HitPoints dmg, PlayerNumber dealing_plyr_idx)
 {
@@ -277,6 +289,38 @@ void lua_on_level_up(struct Thing *thing)
 	{
 		lua_pop(Lvl_script, 1);
 	}
+}
+
+void lua_on_pick_up(struct Thing* thing, PlayerNumber plyr_idx)
+{
+    SYNCDBG(6, "Starting");
+    lua_getglobal(Lvl_script, "OnPickUp");
+    if (lua_isfunction(Lvl_script, -1))
+    {
+        lua_pushThing(Lvl_script, thing);
+        lua_pushPlayer(Lvl_script, plyr_idx);
+        CheckLua(Lvl_script, lua_pcall(Lvl_script, 2, 0, 0), "OnPickUp");
+    }
+    else
+    {
+        lua_pop(Lvl_script, 1);
+    }
+}
+
+void lua_on_slap(struct Thing* thing,PlayerNumber plyr_idx)
+{
+    SYNCDBG(6, "Starting");
+    lua_getglobal(Lvl_script, "OnSlap");
+    if (lua_isfunction(Lvl_script, -1))
+    {
+        lua_pushThing(Lvl_script, thing);
+        lua_pushPlayer(Lvl_script, plyr_idx);
+        CheckLua(Lvl_script, lua_pcall(Lvl_script, 2, 0, 0), "OnSlap");
+    }
+    else
+    {
+        lua_pop(Lvl_script, 1);
+    }
 }
 
 // Called when a slab type changes (e.g. pretty_path -> hatchery_area, path -> pretty_path)

@@ -40,12 +40,14 @@ struct Point { // sizeof = 4
 
 /******************************************************************************/
 extern struct Point ari_Points[];
+extern int32_t count_Points;
+extern int32_t ix_Points;
+extern int32_t free_Points;
 
 #pragma pack()
 /******************************************************************************/
 #define INVALID_POINT (&ari_Points[0])
 /******************************************************************************/
-AridPointId point_new(void);
 void point_dispose(AridPointId pt_id);
 TbBool point_set(AridPointId pt_id, long x, long y);
 struct Point *point_get(AridPointId pt_id);

@@ -21,6 +21,7 @@
 
 #include "globals.h"
 #include "bflib_basics.h"
+#include "ariadne_update.h"
 #include "room_data.h"
 #include "room_garden.h"
 #include "map_utils.h"
@@ -35,7 +36,6 @@
 #include "thing_objects.h"
 #include "room_list.h"
 #include "room_workshop.h"
-#include "ariadne_wallhug.h"
 #include "config_terrain.h"
 #include "config_creature.h"
 #include "gui_soundmsgs.h"
@@ -313,7 +313,7 @@ TbBool replace_slab_from_script(MapSlabCoord slb_x, MapSlabCoord slb_y, unsigned
             else
             {
                 place_slab_type_on_map(slabkind, slab_subtile(slb_x, 0), slab_subtile(slb_y, 0), plyr_idx, 0);
-                set_alt_bit_on_slabs_around(slb_x, slb_y);
+                update_wibble_on_surrounding_slabs(slb_x, slb_y);
             }
             return true;
         }
@@ -572,8 +572,9 @@ EventIndex update_cannot_find_room_of_role_wth_spare_capacity_event(PlayerNumber
         }
     } else
     {
-        // We simply don't have the room of that kind
-        if (rrole == RoRoF_LairStorage || rrole == RoRoF_GoldStorage || is_room_of_role_available(plyr_idx, rrole))
+        // We simply don't have the room of that kind. Asking for a lair the player cannot build only spams the
+        // player, and the original game kept quiet then too.
+        if (rrole == RoRoF_GoldStorage || is_room_of_role_available(plyr_idx, rrole))
         {
             switch (rrole)
             {
